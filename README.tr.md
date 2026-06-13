@@ -22,7 +22,7 @@ Proje; 3 boyutlu mekanik tasarım (Autodesk Inventor), gömülü sistemler (ESP3
 
 ## Klasör Yapısı
 
-*   `CAD-Models/`: Autodesk Inventor parça ve montaj dosyaları.
+*   `CAD-Models/`: Evrensel uyumluluk için dışa aktarılmış, ROS2 adlandırmasıyla senkronize `mechanism_308.step` 3D modeli.
 *   `ROS2-Workspace/`: ROS2 paketlerini ve Python yürütme düğümlerini içeren ana `colcon` çalışma alanı.
 *   `photos/`: Fiziksel robotun donanım görselleri.
 *   `Motor_Test/` & `Motor_PID_Test/`: PID hız/konum kontrolü ve enkoder okumaları için ESP32'ye gömülü C/C++ yazılımları.

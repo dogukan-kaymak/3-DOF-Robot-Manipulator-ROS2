@@ -20,7 +20,7 @@ The project spans multiple disciplines, including 3D mechanical design (Autodesk
 
 ## Project Structure
 
-*   `CAD-Models/`: Autodesk Inventor part and assembly files.
+*   `CAD-Models/`: Exported `mechanism_308.step` 3D model for universal CAD compatibility, synced with ROS2 naming.
 *   `ROS2-Workspace/`: The main `colcon` workspace containing the ROS2 packages and Python execution nodes.
 *   `photos/`: Visual documentation of the physical robot and UI interfaces.
 *   `Motor_Test/` & `Motor_PID_Test/`: Embedded C/C++ firmware for the ESP32 to handle PID velocity/position control and encoder reading.
