@@ -1,6 +1,6 @@
 # 3 Serbestlik Dereceli (3-DOF) Robotik Manipülatör - ROS2 & MoveIt2
 
-![ROS2](https://img.shields.io/badge/ROS2-Jazzy-blue.svg) ![Docker](https://img.shields.io/badge/Docker-Konteynerli-2496ED.svg) ![MoveIt2](https://img.shields.io/badge/MoveIt2-Y%C3%B6r%C3%BCnge%20Planlama-orange.svg) ![Hardware](https://img.shields.io/badge/Donan%C4%B1m-ESP32-brightgreen.svg)
+![ROS2](https://img.shields.io/badge/ROS2-Jazzy-blue.svg) ![Docker](https://img.shields.io/badge/Docker-Konteynerli-2496ED.svg) ![Micro-ROS](https://img.shields.io/badge/Micro--ROS-XRCE__DDS-yellow.svg) ![MoveIt2](https://img.shields.io/badge/MoveIt2-Y%C3%B6r%C3%BCnge%20Planlama-orange.svg) ![Hardware](https://img.shields.io/badge/Donan%C4%B1m-ESP32-brightgreen.svg)
 
 *Read this in [English](README.md).*
 
@@ -17,6 +17,7 @@ Proje; 3 boyutlu mekanik tasarım (Autodesk Inventor), gömülü sistemler (ESP3
     *   `mechanism_308_description`: RViz'de 3D dijital ikiz (Digital Twin) için URDF modelleri.
     *   `mechanism_308_moveit_config`: Çarpışma algılayıcı ters kinematik (IK) ve hareket planlaması için MoveIt2 konfigürasyonu.
     *   `mechanism_308_hardware`: Dijital ikiz ile fiziksel ESP32 denetleyicileri arasında köprü kuran özel `ros2_control` donanım arayüzü.
+*   **Micro-ROS ile Gömülü Sistem Entegrasyonu:** Standart seri haberleşme yerine endüstri standardı olan **Micro-ROS** kullanılarak ESP32, ROS2 ağına birinci sınıf bir düğüm (node) olarak dahil edilmiştir. Micro XRCE-DDS ara yazılımı (middleware) sayesinde, MoveIt2'den gelen yörünge verileri anında işlenerek eşsiz bir "Hardware-in-the-Loop" (HIL) mimarisi yaratılmıştır.
 *   **Denavit-Hartenberg (DH) & Kinematik:** İleri ve ters kinematik, DH parametreleri üzerinden parametrik olarak çözülmüştür. Yörünge planlamasında "tekillik" (singularity) sorunlarından kaçınmak için Jacobian matris analizleri yapılmıştır.
 *   **Serbest Sürüş (Free-Drive) & Öğretme Modu:** Motor torklarını keserek robotun insan eliyle fiziksel olarak yönlendirilmesine olanak tanıyan özel Python düğümü (`free_drive.py`). Bu esnada eklem açıları gerçek zamanlı olarak RViz'e aktarılır, böylece robota fiziksel yörünge öğretilebilir ve dinamik sıfır (Home) noktası atanabilir.
 *   **Gerçek Zamanlı HIL (Hardware-in-the-Loop):** Windows (WSL) ve ESP32 mikrodenetleyicileri arasındaki seri haberleşme yönlendirmesi sayesinde, MoveIt2'nin ürettiği eklem uzayı yörüngeleri düşük gecikmeyle (low-latency) donanıma aktarılır.
