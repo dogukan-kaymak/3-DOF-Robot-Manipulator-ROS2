@@ -1,0 +1,715 @@
+#include "ros2_console_tools/parameter_commander.hpp"
+
+#include <ncursesw/ncurses.h>
+#include <thread>
+
+#include "ros2_console_tools/tui.hpp"
+
+namespace ros2_console_tools {
+
+int run_parameter_commander_tool(const std::string & target_node, bool embedded_mode) {
+  auto backend = std::make_shared<ParameterCommanderBackend>(target_node);
+  ParameterCommanderScreen screen(backend, embedded_mode);
+
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(backend);
+  std::thread spin_thread([&executor]() { executor.spin(); });
+
+  const int result = screen.run();
+
+  executor.cancel();
+  if (spin_thread.joinable()) {
+    spin_thread.join();
+  }
+  return result;
+}
+
+namespace {
+
+enum ColorPairId {
+  kColorFrame = tui::kColorFrame,
+  kColorTitle = tui::kColorTitle,
+  kColorHeader = tui::kColorHeader,
+  kColorSelection = tui::kColorSelection,
+  kColorStatus = tui::kColorStatus,
+  kColorHelp = tui::kColorHelp,
+  kColorPopup = tui::kColorPopup,
+  kColorInput = tui::kColorInput,
+  kColorDirty = tui::kColorDirty,
+  kColorCursor = tui::kColorCursor,
+};
+
+using tui::Session;
+using tui::draw_box;
+using tui::draw_box_char;
+using tui::draw_help_bar;
+using tui::draw_help_bar_region;
+using tui::draw_search_box;
+using tui::draw_status_bar;
+using tui::draw_text_hline;
+using tui::draw_text_vline;
+using tui::apply_role_chgat;
+using tui::find_best_match;
+using tui::handle_search_input;
+using tui::is_alt_binding;
+using tui::SearchInputResult;
+using tui::start_search;
+using tui::theme_attr;
+
+}  // namespace
+
+ParameterCommanderScreen::ParameterCommanderScreen(
+  std::shared_ptr<ParameterCommanderBackend> backend, bool embedded_mode)
+: backend_(std::move(backend)),
+  embedded_mode_(embedded_mode) {}
+
+int ParameterCommanderScreen::run() {
+  Session ncurses_session;
+  backend_->refresh_node_list();
+  if (backend_->current_view_ == ParameterCommanderViewMode::NodeList) {
+    backend_->warm_up_node_list();
+    backend_->set_status("Choose a node and press Enter.");
+  } else {
+    backend_->set_status("Connecting to " + backend_->target_node_ + "...");
+    if (!backend_->client_ || !backend_->client_->wait_for_service(std::chrono::seconds(2))) {
+      backend_->set_status("Parameter services for " + backend_->target_node_ + " are not available.");
+    } else {
+      backend_->refresh_all();
+    }
+  }
+
+  bool running = true;
+  while (running && rclcpp::ok()) {
+    backend_->maybe_refresh_node_list();
+    terminal_pane_.update();
+    draw();
+    const int key = getch();
+    if (key == ERR) {
+      continue;
+    }
+    running = handle_key(key);
+  }
+
+  return 0;
+}
+
+bool ParameterCommanderScreen::handle_key(int key) {
+  if (popup_open_) {
+    return handle_popup_key(key);
+  }
+  if (is_alt_binding(key, 't')) {
+    search_state_.active = false;
+    terminal_pane_.toggle();
+    return true;
+  }
+  if (terminal_pane_.visible()) {
+    if (key == KEY_F(10)) {
+      curs_set(1);
+      return false;
+    }
+    return terminal_pane_.handle_key(key);
+  }
+  if (search_state_.active) {
+    return handle_search_key(key);
+  }
+
+  switch (key) {
+    case KEY_F(10):
+      curs_set(1);
+      return false;
+    case KEY_F(4):
+      backend_->refresh_all();
+      return true;
+    case KEY_F(3):
+      if (backend_->current_view_ == ParameterCommanderViewMode::ParameterList) {
+        backend_->refresh_selected();
+        return true;
+      }
+      break;
+    case 27:
+      if (is_alt_binding(key, 's')) {
+        start_search(search_state_);
+        backend_->set_status("Search.");
+        return true;
+      }
+      if (backend_->current_view_ == ParameterCommanderViewMode::ParameterList) {
+        close_popup();
+        if (embedded_mode_) {
+          curs_set(1);
+          return false;
+        }
+        backend_->switch_to_node_list();
+        return true;
+      }
+      if (embedded_mode_) {
+        return false;
+      }
+      break;
+    case '\n':
+    case KEY_ENTER:
+      if (backend_->current_view_ == ParameterCommanderViewMode::NodeList) {
+        backend_->select_current_node();
+        return true;
+      }
+      break;
+    default:
+      break;
+  }
+
+  if (backend_->current_view_ == ParameterCommanderViewMode::NodeList) {
+    handle_node_list_key(key);
+  } else {
+    handle_list_key(key);
+  }
+  return true;
+}
+
+bool ParameterCommanderScreen::handle_search_key(int key) {
+  const SearchInputResult result = handle_search_input(search_state_, key);
+  if (result == SearchInputResult::Cancelled) {
+    backend_->set_status("Search cancelled.");
+    return true;
+  }
+  if (result == SearchInputResult::Accepted) {
+    backend_->set_status(search_state_.query.empty() ? "Search closed." : "Search: " + search_state_.query);
+    return true;
+  }
+  if (result != SearchInputResult::Changed) {
+    return true;
+  }
+
+  if (backend_->current_view_ == ParameterCommanderViewMode::NodeList) {
+    const int match = find_best_match(backend_->node_entries_, search_state_.query, backend_->selected_node_index_);
+    if (match >= 0) {
+      backend_->selected_node_index_ = match;
+    }
+    backend_->set_status("Search: " + search_state_.query);
+    return true;
+  }
+
+  const auto items = backend_->visible_parameter_items();
+  std::vector<std::string> labels;
+  labels.reserve(items.size());
+  for (const auto & item : items) {
+    labels.push_back(item.label);
+  }
+  const int match = find_best_match(labels, search_state_.query, backend_->selected_parameter_item_index_);
+  if (match >= 0) {
+    backend_->selected_parameter_item_index_ = match;
+    backend_->sync_edit_buffer_from_selected();
+  }
+  backend_->set_status("Search: " + search_state_.query);
+  return true;
+}
+
+bool ParameterCommanderScreen::handle_popup_key(int key) {
+  auto * entry = backend_->selected_entry();
+  if (entry == nullptr) {
+    popup_open_ = false;
+    return true;
+  }
+
+  switch (key) {
+    case KEY_F(10):
+      close_popup();
+      curs_set(1);
+      return false;
+    case 27:
+      close_popup();
+      return true;
+    case KEY_F(3):
+      backend_->refresh_selected();
+      popup_buffer_ = entry->edit_buffer;
+      popup_dirty_ = false;
+      return true;
+    case KEY_F(2):
+      entry->edit_buffer = popup_buffer_;
+      entry->dirty = popup_dirty_;
+      backend_->save_selected();
+      popup_buffer_ = entry->edit_buffer;
+      popup_dirty_ = entry->dirty;
+      return true;
+    case '\n':
+    case KEY_ENTER:
+      entry->edit_buffer = popup_buffer_;
+      entry->dirty = popup_dirty_;
+      backend_->save_selected();
+      if (!entry->dirty) {
+        close_popup();
+      } else {
+        popup_buffer_ = entry->edit_buffer;
+        popup_dirty_ = entry->dirty;
+      }
+      return true;
+    case KEY_BACKSPACE:
+    case 127:
+    case '\b':
+      if (popup_cursor_index_ > 0 && backend_->popup_is_editable(*entry)) {
+        popup_buffer_.erase(popup_cursor_index_ - 1, 1);
+        --popup_cursor_index_;
+        popup_dirty_ = true;
+      }
+      return true;
+    case KEY_DC:
+      if (popup_cursor_index_ < popup_buffer_.size() && backend_->popup_is_editable(*entry)) {
+        popup_buffer_.erase(popup_cursor_index_, 1);
+        popup_dirty_ = true;
+      }
+      return true;
+    case KEY_LEFT:
+      if (popup_cursor_index_ > 0) {
+        --popup_cursor_index_;
+      }
+      return true;
+    case KEY_RIGHT:
+      if (popup_cursor_index_ < popup_buffer_.size()) {
+        ++popup_cursor_index_;
+      }
+      return true;
+    case KEY_HOME:
+      popup_cursor_index_ = 0;
+      return true;
+    case KEY_END:
+      popup_cursor_index_ = popup_buffer_.size();
+      return true;
+    case ' ':
+      if (!backend_->popup_is_editable(*entry)) {
+        return true;
+      }
+      if (entry->descriptor.type == ParameterType::PARAMETER_BOOL) {
+        backend_->toggle_bool_buffer(popup_buffer_);
+        popup_cursor_index_ = popup_buffer_.size();
+      } else {
+        popup_buffer_.insert(popup_cursor_index_, 1, ' ');
+        ++popup_cursor_index_;
+      }
+      popup_dirty_ = true;
+      return true;
+    default:
+      if (key >= 32 && key <= 126 && backend_->popup_is_editable(*entry)) {
+        popup_buffer_.insert(popup_cursor_index_, 1, static_cast<char>(key));
+        ++popup_cursor_index_;
+        popup_dirty_ = true;
+      }
+      return true;
+  }
+}
+
+void ParameterCommanderScreen::handle_list_key(int key) {
+  const auto items = backend_->visible_parameter_items();
+  if (items.empty()) {
+    return;
+  }
+
+  switch (key) {
+    case KEY_UP:
+    case 'k':
+      if (backend_->selected_parameter_item_index_ > 0) {
+        --backend_->selected_parameter_item_index_;
+      }
+      backend_->sync_edit_buffer_from_selected();
+      break;
+    case KEY_DOWN:
+    case 'j':
+      if (backend_->selected_parameter_item_index_ + 1 < static_cast<int>(items.size())) {
+        ++backend_->selected_parameter_item_index_;
+      }
+      backend_->sync_edit_buffer_from_selected();
+      break;
+    case KEY_PPAGE:
+      backend_->selected_parameter_item_index_ =
+        std::max(0, backend_->selected_parameter_item_index_ - page_step());
+      backend_->sync_edit_buffer_from_selected();
+      break;
+    case KEY_NPAGE:
+      backend_->selected_parameter_item_index_ = std::min(
+        static_cast<int>(items.size()) - 1,
+        backend_->selected_parameter_item_index_ + page_step());
+      backend_->sync_edit_buffer_from_selected();
+      break;
+    case KEY_RIGHT:
+    case 'l':
+      backend_->expand_selected_namespace();
+      break;
+    case KEY_LEFT:
+    case 'h':
+      backend_->collapse_selected_namespace();
+      break;
+    case '\n':
+    case KEY_ENTER:
+      backend_->activate_selected_parameter_item();
+      if (backend_->selected_entry() != nullptr) {
+        open_popup();
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+void ParameterCommanderScreen::handle_node_list_key(int key) {
+  if (backend_->node_entries_.empty()) {
+    return;
+  }
+
+  switch (key) {
+    case KEY_UP:
+    case 'k':
+      if (backend_->selected_node_index_ > 0) {
+        --backend_->selected_node_index_;
+      }
+      break;
+    case KEY_DOWN:
+    case 'j':
+      if (backend_->selected_node_index_ + 1 < static_cast<int>(backend_->node_entries_.size())) {
+        ++backend_->selected_node_index_;
+      }
+      break;
+    case KEY_PPAGE:
+      backend_->selected_node_index_ = std::max(0, backend_->selected_node_index_ - page_step());
+      break;
+    case KEY_NPAGE:
+      backend_->selected_node_index_ = std::min(
+        static_cast<int>(backend_->node_entries_.size()) - 1,
+        backend_->selected_node_index_ + page_step());
+      break;
+    default:
+      break;
+  }
+}
+
+int ParameterCommanderScreen::page_step() const {
+  int rows = 0;
+  int columns = 0;
+  getmaxyx(stdscr, rows, columns);
+  return std::max(5, rows - 8);
+}
+
+void ParameterCommanderScreen::open_popup() {
+  auto * entry = backend_->selected_entry();
+  if (entry == nullptr) {
+    backend_->set_status("No parameter selected.");
+    return;
+  }
+  popup_open_ = true;
+  popup_buffer_ = entry->edit_buffer;
+  popup_cursor_index_ = popup_buffer_.size();
+  popup_dirty_ = entry->dirty;
+  curs_set(0);
+}
+
+void ParameterCommanderScreen::close_popup() {
+  popup_open_ = false;
+  popup_buffer_.clear();
+  popup_cursor_index_ = 0;
+  popup_dirty_ = false;
+  curs_set(0);
+}
+
+void ParameterCommanderScreen::draw() {
+  erase();
+
+  int rows = 0;
+  int columns = 0;
+  getmaxyx(stdscr, rows, columns);
+  const auto layout = tui::make_commander_layout(rows, terminal_pane_.visible());
+  const int help_row = layout.help_row;
+  const int status_row = layout.status_row;
+  const int content_bottom = layout.content_bottom;
+  draw_box(0, 0, content_bottom, columns - 1, kColorFrame);
+  mvprintw(0, 1, "Parameter Commander ");
+  if (backend_->current_view_ == ParameterCommanderViewMode::NodeList) {
+    draw_node_list(1, 1, content_bottom - 1, columns - 2);
+  } else {
+    draw_parameter_list(1, 1, content_bottom - 1, columns - 2);
+  }
+  draw_status_line(status_row, columns);
+  draw_help_line(help_row, columns);
+  draw_search_box(layout.pane_rows, columns, search_state_);
+  if (popup_open_) {
+    draw_popup(rows, columns);
+  }
+  if (terminal_pane_.visible()) {
+    terminal_pane_.draw(layout.terminal_top, 0, rows - 1, columns - 1);
+  }
+  refresh();
+}
+
+void ParameterCommanderScreen::draw_parameter_list(int top, int left, int bottom, int right) {
+  const auto items = backend_->visible_parameter_items();
+  const int visible_rows = std::max(1, bottom - top + 1);
+  const int width = right - left + 1;
+  const int name_width = std::max(22, width / 3);
+  const int value_width = std::max(12, width / 6);
+  const int desc_width = std::max(10, width - name_width - value_width - 2);
+  const int separator_one_x = left + name_width;
+  const int separator_two_x = left + name_width + 1 + value_width;
+  if (backend_->selected_parameter_item_index_ < backend_->list_scroll_) {
+    backend_->list_scroll_ = backend_->selected_parameter_item_index_;
+  }
+  if (backend_->selected_parameter_item_index_ >= backend_->list_scroll_ + visible_rows) {
+    backend_->list_scroll_ = backend_->selected_parameter_item_index_ - visible_rows + 1;
+  }
+
+  const std::string header = pad_column("Name", name_width) + " "
+    + pad_column("Current", value_width) + " "
+    + pad_column("Descriptor", desc_width);
+  attron(theme_attr(kColorHeader));
+  mvaddnstr(top, left, header.c_str(), width);
+  attroff(theme_attr(kColorHeader));
+
+  attron(COLOR_PAIR(kColorFrame));
+  draw_text_vline(top, separator_one_x, visible_rows);
+  draw_text_vline(top, separator_two_x, visible_rows);
+  attroff(COLOR_PAIR(kColorFrame));
+
+  for (int row = 1; row < visible_rows; ++row) {
+    const int entry_index = backend_->list_scroll_ + row - 1;
+    const int row_y = top + row;
+    const bool is_selected = entry_index == backend_->selected_parameter_item_index_;
+
+    if (is_selected) {
+      attron(theme_attr(kColorSelection));
+    }
+    mvhline(row_y, left, ' ', width);
+    if (is_selected) {
+      attroff(theme_attr(kColorSelection));
+    }
+    if (entry_index >= static_cast<int>(items.size())) {
+      if (is_selected) {
+        attron(theme_attr(kColorSelection));
+      } else {
+        attron(COLOR_PAIR(kColorFrame));
+      }
+      draw_box_char(row_y, separator_one_x, WACS_VLINE, '|');
+      draw_box_char(row_y, separator_two_x, WACS_VLINE, '|');
+      if (is_selected) {
+        attroff(theme_attr(kColorSelection));
+      } else {
+        attroff(COLOR_PAIR(kColorFrame));
+      }
+      continue;
+    }
+    const auto & item = items[static_cast<std::size_t>(entry_index)];
+
+    if (is_selected) {
+      attron(theme_attr(kColorSelection));
+    } else if (item.is_namespace) {
+      attron(COLOR_PAIR(kColorFrame) | A_BOLD);
+    }
+    draw_parameter_name_cell(row_y, left, name_width, item);
+    if (is_selected) {
+      attron(theme_attr(kColorSelection));
+    } else {
+      attron(COLOR_PAIR(kColorFrame));
+    }
+    draw_box_char(row_y, separator_one_x, WACS_VLINE, '|');
+    draw_box_char(row_y, separator_two_x, WACS_VLINE, '|');
+    if (is_selected) {
+      attroff(theme_attr(kColorSelection));
+    } else {
+      attroff(COLOR_PAIR(kColorFrame));
+    }
+    mvaddnstr(
+      row_y,
+      left + name_width + 1,
+      pad_column(item.is_namespace ? "" : backend_->summary_value(*item.entry), value_width).c_str(),
+      value_width);
+    mvaddnstr(
+      row_y,
+      left + name_width + 1 + value_width + 1,
+      pad_column(item.is_namespace ? "" : backend_->descriptor_summary(item.entry->descriptor), desc_width).c_str(),
+      desc_width);
+    if (is_selected) {
+      apply_role_chgat(row_y, left, width, kColorSelection);
+      attron(theme_attr(kColorSelection));
+      draw_box_char(row_y, separator_one_x, WACS_VLINE, '|');
+      draw_box_char(row_y, separator_two_x, WACS_VLINE, '|');
+      attroff(theme_attr(kColorSelection));
+    } else if (item.is_namespace) {
+      attroff(COLOR_PAIR(kColorFrame) | A_BOLD);
+    }
+  }
+}
+
+void ParameterCommanderScreen::draw_parameter_name_cell(
+  int row, int left, int width, const ParameterViewItem & item) const
+{
+  mvhline(row, left, ' ', width);
+  const int indent = item.depth * 2;
+  if (item.is_namespace) {
+    if (indent < width) {
+      mvaddnstr(
+        row,
+        left + indent,
+        truncate_parameter_line(item.label, width - indent).c_str(),
+        width - indent);
+    }
+    return;
+  }
+
+  const std::string name = item.entry->dirty ? "*" + item.label : item.label;
+  const std::string rendered = std::string(static_cast<std::size_t>(indent), ' ') + "  " + name;
+  mvaddnstr(row, left, pad_column(rendered, width).c_str(), width);
+}
+
+void ParameterCommanderScreen::draw_node_list(int top, int left, int bottom, int right) {
+  const int visible_rows = std::max(1, bottom - top + 1);
+  const int width = right - left + 1;
+  if (backend_->selected_node_index_ < backend_->node_scroll_) {
+    backend_->node_scroll_ = backend_->selected_node_index_;
+  }
+  if (backend_->selected_node_index_ >= backend_->node_scroll_ + visible_rows - 1) {
+    backend_->node_scroll_ = backend_->selected_node_index_ - visible_rows + 2;
+  }
+
+  attron(theme_attr(kColorHeader));
+  mvaddnstr(top, left, pad_column("Discovered Nodes", width).c_str(), width);
+  attroff(theme_attr(kColorHeader));
+
+  for (int row = 1; row < visible_rows; ++row) {
+    const int entry_index = backend_->node_scroll_ + row - 1;
+    mvhline(top + row, left, ' ', width);
+    if (entry_index >= static_cast<int>(backend_->node_entries_.size())) {
+      continue;
+    }
+    const std::string rendered = pad_column(backend_->node_entries_[static_cast<std::size_t>(entry_index)], width);
+    if (entry_index == backend_->selected_node_index_) {
+      attron(theme_attr(kColorSelection));
+    }
+    mvaddnstr(top + row, left, rendered.c_str(), width);
+    if (entry_index == backend_->selected_node_index_) {
+      attroff(theme_attr(kColorSelection));
+    }
+  }
+}
+
+void ParameterCommanderScreen::draw_popup(int rows, int columns) {
+  const ParameterEntry * entry = backend_->selected_entry();
+  if (entry == nullptr) {
+    return;
+  }
+
+  const int popup_width = std::min(columns - 4, 80);
+  const int popup_height = std::min(rows - 4, 14);
+  const int top = std::max(1, (rows - popup_height) / 2);
+  const int left = std::max(2, (columns - popup_width) / 2);
+  const int bottom = top + popup_height - 1;
+  const int right = left + popup_width - 1;
+  const int inner_width = popup_width - 2;
+  const int field_top = top + 8;
+  const int field_left = left + 2;
+  const int field_right = right - 2;
+  const int field_inner_width = std::max(1, field_right - field_left - 1);
+  const int edit_text_width = std::max(1, field_inner_width - 1);
+
+  for (int row = top + 1; row < bottom; ++row) {
+    attron(COLOR_PAIR(kColorPopup));
+    mvhline(row, left + 1, ' ', inner_width);
+    attroff(COLOR_PAIR(kColorPopup));
+  }
+
+  if (popup_dirty_) {
+    attron(COLOR_PAIR(kColorDirty));
+    draw_box_char(top, left, WACS_ULCORNER, '+');
+    draw_box_char(top, right, WACS_URCORNER, '+');
+    draw_box_char(bottom, left, WACS_LLCORNER, '+');
+    draw_box_char(bottom, right, WACS_LRCORNER, '+');
+    draw_text_hline(top, left + 1, right - left - 1);
+    draw_text_hline(bottom, left + 1, right - left - 1);
+    draw_text_vline(top + 1, left, bottom - top - 1);
+    draw_text_vline(top + 1, right, bottom - top - 1);
+    attroff(COLOR_PAIR(kColorDirty));
+  } else {
+    draw_box(top, left, bottom, right, kColorFrame);
+  }
+  attron(theme_attr(kColorTitle));
+  mvprintw(top, left + 2, " Edit Parameter ");
+  attroff(theme_attr(kColorTitle));
+
+  constexpr int label_width = 11;
+  auto draw_popup_field = [&](int row, const std::string & label, const std::string & value) {
+    const std::string label_text = pad_column(label, label_width) + ": ";
+    mvaddnstr(row, left + 1, label_text.c_str(), inner_width);
+    mvaddnstr(
+      row,
+      left + 1 + static_cast<int>(label_text.size()),
+      truncate_parameter_line(value, inner_width - static_cast<int>(label_text.size())).c_str(),
+      inner_width - static_cast<int>(label_text.size()));
+  };
+
+  attron(COLOR_PAIR(kColorPopup));
+  draw_popup_field(top + 1, "name", "");
+  attron(theme_attr(kColorHeader));
+  mvaddnstr(
+    top + 1,
+    left + 1 + label_width + 2,
+    truncate_parameter_line(entry->name, inner_width - label_width - 2).c_str(),
+    inner_width - label_width - 2);
+  attroff(theme_attr(kColorHeader));
+  draw_popup_field(top + 2, "descriptor", backend_->descriptor_summary(entry->descriptor));
+  draw_popup_field(
+    top + 3,
+    "type",
+    parameter_type_name(entry->descriptor.type)
+      + "  [" + backend_->parameter_min(*entry) + "]"
+      + "  [" + backend_->parameter_max(*entry) + "]");
+  draw_popup_field(top + 4, "current", backend_->summary_value(*entry));
+  if (is_array_type(entry->descriptor.type)) {
+    draw_popup_field(top + 5, "syntax", "Use [item, item]; quote strings containing commas.");
+  }
+  draw_text_hline(top + 6, left + 1, inner_width);
+  attroff(COLOR_PAIR(kColorPopup));
+  draw_box(field_top, field_left, field_top + 2, field_right, kColorFrame);
+  attron(theme_attr(kColorHeader));
+  mvhline(field_top + 1, field_left + 1, ' ', field_inner_width);
+  popup_cursor_index_ = std::min(popup_cursor_index_, popup_buffer_.size());
+  const int cursor_column = static_cast<int>(popup_cursor_index_);
+  const int visible_start = std::max(0, cursor_column - edit_text_width);
+  const std::string visible_buffer =
+    popup_buffer_.substr(
+      static_cast<std::size_t>(visible_start),
+      static_cast<std::size_t>(edit_text_width));
+  mvaddnstr(field_top + 1, field_left + 1, visible_buffer.c_str(), edit_text_width);
+  attroff(theme_attr(kColorHeader));
+  if (backend_->popup_is_editable(*entry) && software_caret_visible()) {
+    const int cursor_x = field_left + 1 + std::clamp(cursor_column - visible_start, 0, edit_text_width);
+    attron(COLOR_PAIR(kColorCursor) | A_BOLD);
+    mvaddch(field_top + 1, cursor_x, ' ');
+    attroff(COLOR_PAIR(kColorCursor) | A_BOLD);
+  }
+
+  attron(COLOR_PAIR(kColorPopup));
+  draw_text_hline(bottom - 2, left + 1, inner_width);
+  attroff(COLOR_PAIR(kColorPopup));
+  draw_help_bar_region(bottom - 1, left + 1, inner_width, "F3 Load  F2 Save  Esc Close  F10 Exit");
+}
+
+std::string ParameterCommanderScreen::pad_column(const std::string & value, int width) const {
+  const std::string truncated = truncate_parameter_line(value, width);
+  if (visible_width(truncated) >= width) {
+    return truncated;
+  }
+  return truncated + std::string(static_cast<std::size_t>(width - visible_width(truncated)), ' ');
+}
+
+void ParameterCommanderScreen::draw_status_line(int row, int columns) const {
+  draw_status_bar(row, columns, truncate_parameter_line(backend_->status_message_, columns - 2));
+}
+
+void ParameterCommanderScreen::draw_help_line(int row, int columns) const {
+  std::string help;
+  if (popup_open_) {
+    help = "F2 Save  F3 Reload  Enter Save+Close  Esc Close  F10 Exit";
+  } else if (backend_->current_view_ == ParameterCommanderViewMode::NodeList) {
+    help = "Enter Open  Alt+S Search  F4 Refresh  F10 Exit";
+  } else {
+    help = "Enter Edit  Alt+S Search  F3 Refresh  F4 Refresh All  Esc Back  F10 Exit";
+  }
+  draw_help_bar(
+    row,
+    columns,
+    truncate_parameter_line(tui::with_terminal_help(help, terminal_pane_.visible()), columns));
+}
+
+}  // namespace ros2_console_tools

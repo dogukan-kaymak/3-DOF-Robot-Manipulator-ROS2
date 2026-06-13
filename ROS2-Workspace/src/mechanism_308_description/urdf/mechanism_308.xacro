@@ -1,0 +1,127 @@
+<?xml version="1.0" ?>
+<robot name="mechanism_308" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<xacro:include filename="$(find mechanism_308_description)/urdf/materials.xacro" />
+<xacro:include filename="$(find mechanism_308_description)/urdf/mechanism_308.ros2_control.xacro" />
+<link name="base_link">
+  <inertial>
+    <origin xyz="-0.025727202961667216 0.027333129442365448 0.019340586495362074" rpy="0 0 0"/>
+    <mass value="0.4702145869624587"/>
+    <inertia ixx="0.00176" iyy="0.001765" izz="0.00278" ixy="0.000215" iyz="0.000187" ixz="-0.000176"/>
+  </inertial>
+  <visual>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mechanism_308_description)/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mechanism_308_description)/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="L2">
+  <inertial>
+    <origin xyz="-0.02976402804793433 3.0530039469726394e-09 0.04094489479240211" rpy="0 0 0"/>
+    <mass value="0.08532899062626768"/>
+    <inertia ixx="3.5e-05" iyy="5.5e-05" izz="3.6e-05" ixy="-0.0" iyz="0.0" ixz="7e-06"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.0 -0.0 -0.1133" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mechanism_308_description)/meshes/L2.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0.0 -0.0 -0.1133" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mechanism_308_description)/meshes/L2.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="L3">
+  <inertial>
+    <origin xyz="0.0004945458837059373 0.08293764899224224 -2.2742993613295015e-05" rpy="0 0 0"/>
+    <mass value="0.06626362286965412"/>
+    <inertia ixx="9.5e-05" iyy="3.3e-05" izz="0.000116" ixy="1.7e-05" iyz="-0.0" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.003 -0.0 -0.1658" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mechanism_308_description)/meshes/L3.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.003 -0.0 -0.1658" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mechanism_308_description)/meshes/L3.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="L4">
+  <inertial>
+    <origin xyz="0.014739804287081111 0.02472475676111771 5.831901662978201e-07" rpy="0 0 0"/>
+    <mass value="0.010752663043224515"/>
+    <inertia ixx="1.6e-05" iyy="1e-06" izz="1.5e-05" ixy="-1e-06" iyz="-0.0" ixz="-0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.0235 -0.1 -0.1658" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mechanism_308_description)/meshes/L4.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.0235 -0.1 -0.1658" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="file://$(find mechanism_308_description)/meshes/L4.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<joint name="r1" type="revolute">
+  <origin xyz="0.0 0.0 0.1133" rpy="0 0 0"/>
+  <parent link="base_link"/>
+  <child link="L2"/>
+  <axis xyz="-0.0 0.0 1.0"/>
+  <!-- To add limits, change type to "revolute" and uncomment: -->
+  <limit effort="0.7" velocity="7.85" upper="6.283185" lower="-6.283185"/>
+</joint>
+
+<joint name="r2" type="revolute">
+  <origin xyz="0.003 0.0 0.0525" rpy="0 0 0"/>
+  <parent link="L2"/>
+  <child link="L3"/>
+  <axis xyz="1.0 0.0 -0.0"/>
+  <!-- To add limits, change type to "revolute" and uncomment: -->
+  <limit effort="0.7" velocity="7.85" upper="3.83972" lower="-0.69813"/>
+</joint>
+
+<joint name="r3" type="revolute">
+  <origin xyz="0.0205 0.1 0.0" rpy="0 0 0"/>
+  <parent link="L3"/>
+  <child link="L4"/>
+  <axis xyz="1.0 0.0 -0.0"/>
+  <!-- To add limits, change type to "revolute" and uncomment: -->
+  <limit effort="0.7" velocity="7.85" upper="6.283185" lower="-6.283185"/>
+</joint>
+
+<!-- SANAL UÇ NOKTASI (TOOL TIP) -->
+<link name="tool_tip" />
+<joint name="tool_joint" type="fixed">
+  <!-- Mızrağın ucunun L4 motor miline olan uzaklığı. Tahmini: Y ekseninde 15 cm -->
+  <!-- Fusion 360'tan alınan kesin koordinatlara göre hesaplanmış tam sivri uç -->
+  <origin xyz="0.0185 0.15 0.0" rpy="0 0 0"/>
+  <parent link="L4"/>
+  <child link="tool_tip"/>
+</joint>
+
+</robot>

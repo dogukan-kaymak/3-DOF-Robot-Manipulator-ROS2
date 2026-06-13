@@ -1,0 +1,7 @@
+<library path="mechanism_308_hardware">
+  <class name="mechanism_308_hardware/Mechanism308SystemHardware" type="mechanism_308_hardware::Mechanism308SystemHardware" base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Hardware interface for Mechanism 308 via ROS 2 Pub/Sub to ESP32
+    </description>
+  </class>
+</library>

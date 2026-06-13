@@ -1,0 +1,68 @@
+/powershell
+	usbipd list
+	usbipd bind --busid {BUSID}
+	usbipd attach --wsl --busid {BUSID}
+
+
+	docker logs microros_agent
+
+
+
+/wsl	
+	lsusb
+	ls -l /dev/ttyUSB* /dev/ttyACM*
+	sudo modprobe cp210x
+	sudo chmod a+rw /dev/ttyUSB0
+
+
+
+	[CTRL + ü]  //log done
+	get_idf
+	idf.py menuconfig
+	idf.py build flash monitor
+
+
+
+agent_ip = mine_com_ip
+
+	docker network ls
+	docker network inspect ros_net_308
+	docker network create ros_net_308
+	docker network connect ros_net_308 microros_agent
+	docker network connect ros_net_308 project_308_container
+	                                                              
+	docker network ls                                           
+                                
+
+
+
+source /opt/ros/jazzy/setup.bash
+mkdir -p /root/microros_ws/src
+cd /root/microros_ws/src
+git clone -b jazzy https://github.com/micro-ROS/micro_ros_setup.git
+
+
+
+cd /root/microros_ws
+rosdep update
+rosdep install --from-paths src --ignore-src -y
+colcon build
+source install/local_setup.bash
+                         
+                                                              
+                 
+ros2 run micro_ros_setup create_agent_ws.sh
+ros2 run micro_ros_setup build_agent.sh
+                                             
+source install/local_setup.bash
+pkill micro_ros_agent
+ros2 run micro_ros_agent micro_ros_agent udp4 --port 8888
+
+
+ros2 daemon stop
+ros2 daemon start
+
+New-NetFirewallRule -DisplayName "Micro-ROS UDP" -Direction Inbound -Protocol UDP -LocalPort 8888 -Action Allow
+
+
+

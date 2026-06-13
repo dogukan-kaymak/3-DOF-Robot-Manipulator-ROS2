@@ -1,0 +1,40 @@
+<?xml version="1.0" ?>
+<robot name="mechanism_308" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <ros2_control name="GazeboSimSystem" type="system">
+    <hardware>
+      <plugin>mechanism_308_hardware/Mechanism308SystemHardware</plugin>
+    </hardware>
+    <joint name="r1">
+      <command_interface name="position">
+        <param name="min">-6.28</param>
+        <param name="max">6.28</param>
+      </command_interface>
+
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+
+    </joint>
+    <joint name="r2">
+      <command_interface name="position">
+        <param name="min">-6.28</param>
+        <param name="max">6.28</param>
+      </command_interface>
+
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+
+    </joint>
+    <joint name="r3">
+      <command_interface name="position">
+        <param name="min">-6.28</param>
+        <param name="max">6.28</param>
+      </command_interface>
+
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+
+    </joint>
+  </ros2_control>
+
+</robot>

@@ -1,0 +1,6 @@
+# Default initial positions for mechanism_308's ros2_control fake system
+
+initial_positions:
+  r1: 0
+  r2: 0
+  r3: 0

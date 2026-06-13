@@ -1,0 +1,29 @@
+control for agent is working or not : (in container)->ps aux | grep pkill micro_ros_agent
+sleep 1
+source ~/microros_ws/install/setup.bash
+ros2 run micro_ros_agent micro_ros_agent udp4 --port 8888 -v6
+
+
+
+cd /root/project_308_ws
+source install/setup.bash
+ros2 launch mechanism_308_moveit_config real_robot.launch.py
+
+
+docker exec -it project_308_container bash
+cd /root/project_308_ws
+source install/setup.bash
+python3 tool_trail.py
+
+
+docker exec -it project_308_container bash
+cd /root/project_308_ws
+source install/setup.bash
+python3 free_drive.py
+
+
+
+docker exec -it project_308_container bash
+cd /root/project_308_ws
+source install/setup.bash
+ros2 run ros2_console_tools node_commander
