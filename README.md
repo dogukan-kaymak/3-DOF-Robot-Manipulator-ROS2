@@ -1,6 +1,6 @@
 # 3-DOF Serial Robot Manipulator with ROS2 & MoveIt2
 
-![ROS2](https://img.shields.io/badge/ROS2-Humble-blue.svg) ![MoveIt2](https://img.shields.io/badge/MoveIt2-Path%20Planning-orange.svg) ![Hardware](https://img.shields.io/badge/Hardware-ESP32-brightgreen.svg)
+![ROS2](https://img.shields.io/badge/ROS2-Jazzy-blue.svg) ![MoveIt2](https://img.shields.io/badge/MoveIt2-Path%20Planning-orange.svg) ![Hardware](https://img.shields.io/badge/Hardware-ESP32-brightgreen.svg)
 
 ## Overview
 This repository contains the complete software and hardware architecture for a **3 Degrees of Freedom (DOF) Serial Robot Manipulator**. Designed from scratch, the system integrates advanced kinematics, real-time hardware control, and high-level trajectory planning using **ROS2** and **MoveIt2**.
@@ -29,7 +29,7 @@ The project spans multiple disciplines, including 3D mechanical design (Autodesk
 *(Please note: Running the full hardware stack requires WSL port routing and physical ESP32 connections.)*
 
 1.  Navigate to the workspace: `cd ROS2-Workspace`
-2.  Source your ROS2 installation: `source /opt/ros/humble/setup.bash`
+2.  Source your ROS2 installation: `source /opt/ros/jazzy/setup.bash`
 3.  Build the packages: `colcon build`
 4.  Launch the simulation/hardware: `ros2 launch mechanism_308_moveit_config demo.launch.py`
 5.  To activate manual teaching: `ros2 run ros2_console_tools free_drive.py`

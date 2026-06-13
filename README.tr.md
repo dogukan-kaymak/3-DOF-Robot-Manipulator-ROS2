@@ -1,6 +1,6 @@
 # 3 Serbestlik Dereceli (3-DOF) Robotik Manipülatör - ROS2 & MoveIt2
 
-![ROS2](https://img.shields.io/badge/ROS2-Humble-blue.svg) ![MoveIt2](https://img.shields.io/badge/MoveIt2-Y%C3%B6r%C3%BCnge%20Planlama-orange.svg) ![Hardware](https://img.shields.io/badge/Donan%C4%B1m-ESP32-brightgreen.svg)
+![ROS2](https://img.shields.io/badge/ROS2-Jazzy-blue.svg) ![MoveIt2](https://img.shields.io/badge/MoveIt2-Y%C3%B6r%C3%BCnge%20Planlama-orange.svg) ![Hardware](https://img.shields.io/badge/Donan%C4%B1m-ESP32-brightgreen.svg)
 
 *Read this in [English](README.md).*
 
