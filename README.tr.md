@@ -1,6 +1,6 @@
 # 3 Serbestlik Dereceli (3-DOF) Robotik Manipülatör - ROS2 & MoveIt2
 
-![ROS2](https://img.shields.io/badge/ROS2-Jazzy-blue.svg) ![MoveIt2](https://img.shields.io/badge/MoveIt2-Y%C3%B6r%C3%BCnge%20Planlama-orange.svg) ![Hardware](https://img.shields.io/badge/Donan%C4%B1m-ESP32-brightgreen.svg)
+![ROS2](https://img.shields.io/badge/ROS2-Jazzy-blue.svg) ![Docker](https://img.shields.io/badge/Docker-Konteynerli-2496ED.svg) ![MoveIt2](https://img.shields.io/badge/MoveIt2-Y%C3%B6r%C3%BCnge%20Planlama-orange.svg) ![Hardware](https://img.shields.io/badge/Donan%C4%B1m-ESP32-brightgreen.svg)
 
 *Read this in [English](README.md).*
 
@@ -11,6 +11,7 @@ Proje; 3 boyutlu mekanik tasarım (Autodesk Inventor), gömülü sistemler (ESP3
 
 ## Anahtar Özellikler
 
+*   **Docker Konteynerizasyonu:** Tüm ROS2 Jazzy ekosistemi Docker kullanılarak konteynerize edilmiştir. Bu mimari, kütüphane çakışmalarını ("dependency hell") sıfıra indirir ve sistemin farklı bilgisayarlarda anında çalışabilmesine (plug-and-play) olanak tanır.
 *   **Özel Mekanik Tasarım:** Autodesk Inventor kullanılarak modellenmiş eklemli robot kolu tasarımı. Parçalar tork ve yapısal bütünlük (rigidity) hesaba katılarak 3D yazıcı ile üretilmiştir.
 *   **ROS2 Mimarisi:** Modüler ROS2 çalışma alanı (workspace) şu paketleri içerir:
     *   `mechanism_308_description`: RViz'de 3D dijital ikiz (Digital Twin) için URDF modelleri.

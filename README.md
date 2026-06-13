@@ -1,6 +1,6 @@
 # 3-DOF Serial Robot Manipulator with ROS2 & MoveIt2
 
-![ROS2](https://img.shields.io/badge/ROS2-Jazzy-blue.svg) ![MoveIt2](https://img.shields.io/badge/MoveIt2-Path%20Planning-orange.svg) ![Hardware](https://img.shields.io/badge/Hardware-ESP32-brightgreen.svg)
+![ROS2](https://img.shields.io/badge/ROS2-Jazzy-blue.svg) ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED.svg) ![MoveIt2](https://img.shields.io/badge/MoveIt2-Path%20Planning-orange.svg) ![Hardware](https://img.shields.io/badge/Hardware-ESP32-brightgreen.svg)
 
 ## Overview
 This repository contains the complete software and hardware architecture for a **3 Degrees of Freedom (DOF) Serial Robot Manipulator**. Designed from scratch, the system integrates advanced kinematics, real-time hardware control, and high-level trajectory planning using **ROS2** and **MoveIt2**.
@@ -9,6 +9,7 @@ The project spans multiple disciplines, including 3D mechanical design (Autodesk
 
 ## Key Features
 
+*   **Docker Containerization**: The entire ROS2 Jazzy ecosystem is containerized via Docker. This eliminates dependency conflicts, ensuring cross-platform reproducibility and a clean "plug-and-play" development environment.
 *   **Custom 3D Mechanical Design**: A robust articulated arm design modeled in Autodesk Inventor (`.ipt` and `.iam` files). Components were manufactured using 3D printing, optimized for torque and structural rigidity.
 *   **ROS2 Architecture**: Fully containerized in a ROS2 workspace with dedicated packages for:
     *   `mechanism_308_description`: URDF models for accurate 3D visualization in RViz.
